@@ -202,7 +202,7 @@ All defaults are defined in `core/config.py`:
 | `ffmpeg_crf` | `18` | Quality factor (0–51, lower = better) |
 | `ffmpeg_preset` | `medium` | Encoding speed/quality tradeoff |
 | `ffmpeg_audio_bitrate` | `128k` | Audio bitrate |
-| `delete_avi_after_convert` | `false` | Whether to delete the AVI copy after MP4 conversion |
+| `delete_avi_after_convert` | `true` | Whether to delete the AVI copy after MP4 conversion |
 
 ## How EXIF Repair Works
 

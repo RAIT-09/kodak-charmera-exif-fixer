@@ -16,4 +16,4 @@ class AppConfig:
     ffmpeg_crf: int = 18
     ffmpeg_audio_bitrate: str = "128k"
     ffmpeg_preset: str = "medium"
-    delete_avi_after_convert: bool = False
+    delete_avi_after_convert: bool = True
