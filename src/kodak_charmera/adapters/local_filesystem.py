@@ -16,7 +16,10 @@ class LocalFilesystemAdapter(FilesystemPort):
 
     def copy_file(self, src: Path, dst: Path, preserve_mtime: bool = True) -> Path:
         dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
+        # Use copyfile instead of copy2 to avoid copying xattrs/flags,
+        # which fails across filesystem boundaries (FAT32/exFAT → APFS).
+        # The pipeline restores mtime separately via _restore_mtime.
+        shutil.copyfile(src, dst)
         return dst
 
     def ensure_directory(self, path: Path) -> Path:
