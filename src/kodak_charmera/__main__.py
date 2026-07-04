@@ -45,6 +45,7 @@ def main() -> None:
     parser.add_argument(
         "--auto", action="store_true", help="Auto-confirm (for LaunchAgent use)"
     )
+    parser.add_argument("--src", type=str, help="Override source volume")
     parser.add_argument("--dest", type=str, help="Override destination directory")
     args = parser.parse_args()
 
@@ -53,8 +54,11 @@ def main() -> None:
         config.destination_dir = Path(args.dest)
 
     # Detect camera
-    volume_detector = MacOSVolumeDetector()
-    volume = volume_detector.find_camera_volume()
+    if args.src:
+        volume = Path(args.src)
+    else:
+        volume_detector = MacOSVolumeDetector()
+        volume = volume_detector.find_camera_volume()
 
     # Choose presenter
     if args.cli or args.auto:
