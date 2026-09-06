@@ -293,6 +293,8 @@ class TkinterPresenter(PresenterPort):
             return "Convert to MP4"
         if f.exif_fix and f.exif_fix.has_fixes:
             fixes = []
+            if f.exif_fix.fixed_lens_model or f.exif_fix.fixed_f_number is not None:
+                fixes.append("lens: manufacturer data")
             if f.exif_fix.fixed_make or f.exif_fix.fixed_model:
                 fixes.append("camera: Kodak Charmera")
             if f.exif_fix.fixed_modify_date:
