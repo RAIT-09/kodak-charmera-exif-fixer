@@ -7,6 +7,16 @@ from ..core.models import ProcessingPlan, ProgressEvent, CameraFile
 class PresenterPort(ABC):
 
     @abstractmethod
+    def select_source(self, candidates: list[Path]) -> Path | None:
+        """Choose a source if detection is ambiguous or empty."""
+        ...
+
+    @abstractmethod
+    def confirm_overwrite(self, paths: list[Path]) -> bool:
+        """Explicit consent to replace these outputs; False skips the input."""
+        ...
+
+    @abstractmethod
     def show_scanning(self, volume_path: Path) -> None:
         ...
 

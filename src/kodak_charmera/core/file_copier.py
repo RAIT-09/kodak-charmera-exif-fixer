@@ -37,3 +37,8 @@ class FileCopier:
             counter += 1
 
         return dest
+
+    def target_path(self, file: CameraFile, dest_dir: Path) -> Path:
+        prefix = _PREFIX[file.file_type]
+        timestamp = file.file_modified.strftime("%Y%m%d_%H%M%S")
+        return dest_dir / f"{prefix}_{timestamp}{file.source_path.suffix.lower()}"

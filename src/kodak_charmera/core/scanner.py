@@ -17,12 +17,13 @@ class CameraScanner:
         self._exiftool = exiftool
 
     def scan(self, volume_path: Path) -> list[CameraFile]:
-        dcim = volume_path / "DCIM"
+        dcim = next((p for p in sorted(volume_path.iterdir())
+                     if p.name.casefold() == "dcim" and p.is_dir()), volume_path)
         files: list[CameraFile] = []
 
-        for path in self._fs.list_files(dcim):
+        for path in sorted(self._fs.list_files(dcim, recursive=True)):
             # Skip macOS metadata files
-            if path.name.startswith("._"):
+            if path.name.startswith("._") or path.is_symlink():
                 continue
 
             file_type = self._classify_file(path)
@@ -54,12 +55,31 @@ class CameraScanner:
         return None
 
     def _compute_exif_fix(self, exif: ExifData) -> ExifFix:
+        lens_model = "Kodak Charmera built-in lens" if not exif.lens_model else None
+        f_number = 2.4 if exif.f_number is None else None
+        comment = None
+        if lens_model or f_number is not None:
+            added = []
+            if lens_model:
+                added.append("LensModel is a descriptive label")
+            if f_number is not None:
+                added.append("FNumber=2.4 is the nominal manufacturer aperture, not measured exposure")
+            note = ("Charmera EXIF Fixer: " + "; ".join(added) + ". "
+                    "Manufacturer lists lens as 35mm F2.4; focal length fields are not inferred. "
+                    "Source: https://www.kodak.retopro.co/products/"
+                    "kodak-charmera-br-keychain-digital-camera-blind-box")
+            comment = ((exif.user_comment + "\n") if exif.user_comment else "") + note
         return ExifFix(
+            fixed_lens_model=lens_model,
+            fixed_f_number=f_number,
+            fixed_user_comment=comment,
             fixed_modify_date=self._fix_date(exif.modify_date),
             fixed_datetime_original=self._fix_date(exif.datetime_original),
             fixed_create_date=self._fix_date(exif.create_date),
             fixed_width=self._fix_dimension(exif.exif_image_width, exif.actual_image_width),
             fixed_height=self._fix_dimension(exif.exif_image_height, exif.actual_image_height),
+            fixed_make="Kodak" if exif.make != "Kodak" else None,
+            fixed_model="Charmera" if exif.model != "Charmera" else None,
         )
 
     @staticmethod
@@ -74,6 +94,6 @@ class CameraScanner:
 
     @staticmethod
     def _fix_dimension(exif_value: Optional[int], actual_value: Optional[int]) -> Optional[int]:
-        if exif_value is not None and actual_value is not None and exif_value != actual_value:
+        if actual_value is not None and actual_value > 0 and exif_value != actual_value:
             return actual_value
         return None

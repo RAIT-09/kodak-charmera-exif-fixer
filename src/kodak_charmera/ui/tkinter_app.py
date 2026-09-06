@@ -2,7 +2,7 @@ import queue
 import threading
 import traceback
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import ttk, filedialog, messagebox, simpledialog
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -23,6 +23,7 @@ class TkinterPresenter(PresenterPort):
         self._plan: Optional[ProcessingPlan] = None
         self._dest_result: Optional[Path] = None
         self._queue: queue.Queue[Callable[[], None]] = queue.Queue()
+        self._closed = threading.Event()
 
         # Widgets
         self._dest_var: Optional[tk.StringVar] = None
@@ -39,6 +40,7 @@ class TkinterPresenter(PresenterPort):
         self._root.title("Kodak Charmera EXIF Fixer")
         self._root.geometry("700x500")
         self._root.minsize(600, 400)
+        self._root.protocol("WM_DELETE_WINDOW", self._on_cancel)
         self._build_ui()
 
         # Start polling the queue on the main thread
@@ -50,7 +52,7 @@ class TkinterPresenter(PresenterPort):
                 self._on_start()
             except Exception as e:
                 tb = traceback.format_exc()
-                self._enqueue(lambda: self._set_status(f"Error: {e}"))
+                self._enqueue(lambda message=str(e): self._set_status(f"Error: {message}"))
                 print(f"Pipeline error:\n{tb}")
 
         thread = threading.Thread(target=_safe_run, daemon=True)
@@ -152,6 +154,7 @@ class TkinterPresenter(PresenterPort):
         self._confirm_event.set()
 
     def _on_cancel(self) -> None:
+        self._closed.set()
         self._confirmed = False
         self._confirm_event.set()
         if self._root:
@@ -162,6 +165,49 @@ class TkinterPresenter(PresenterPort):
             self._status_label.config(text=text)
 
     # PresenterPort implementation
+
+    def _ask(self, callback):
+        """Run modal dialogs on the UI thread and return to the worker."""
+        ready = threading.Event()
+        result = [None]
+
+        def ask():
+            try:
+                if not self._closed.is_set():
+                    result[0] = callback()
+            finally:
+                ready.set()
+
+        self._enqueue(ask)
+        while not ready.wait(0.1):
+            if self._closed.is_set():
+                return None
+        return result[0]
+
+    def select_source(self, candidates: list[Path]) -> Path | None:
+        if len(candidates) == 1:
+            return candidates[0]
+
+        def choose():
+            if candidates:
+                choices = "\n".join(f"{i}. {p}" for i, p in enumerate(candidates, 1))
+                index = simpledialog.askinteger(
+                    "Select SD card", f"Multiple media cards found:\n{choices}\n\nCard number:",
+                    minvalue=1, maxvalue=len(candidates), parent=self._root,
+                )
+                return candidates[index - 1] if index else None
+            path = filedialog.askdirectory(title="Select SD card or photo folder", parent=self._root)
+            return Path(path) if path else None
+
+        return self._ask(choose)
+
+    def confirm_overwrite(self, paths: list[Path]) -> bool:
+        return bool(self._ask(lambda: messagebox.askyesno(
+            "Overwrite existing files?",
+            "These files already exist:\n\n" + "\n".join(map(str, paths))
+            + "\n\nReplace them after successful processing? No skips this input.",
+            default=messagebox.NO, parent=self._root,
+        )))
 
     def show_scanning(self, volume_path: Path) -> None:
         self._enqueue(lambda: self._set_status(f"Scanning {volume_path}..."))
@@ -176,6 +222,8 @@ class TkinterPresenter(PresenterPort):
 
     def _populate_preview(self) -> None:
         assert self._tree is not None and self._plan is not None
+        if self._dest_var:
+            self._dest_var.set(str(self._plan.destination_dir))
 
         for f in self._plan.files:
             size_str = self._format_size(f.file_size)
@@ -204,11 +252,12 @@ class TkinterPresenter(PresenterPort):
     def on_complete(self, results: list[CameraFile]) -> None:
         succeeded = sum(1 for f in results if f.status == ProcessingStatus.COMPLETED)
         failed = sum(1 for f in results if f.status == ProcessingStatus.FAILED)
+        skipped = sum(1 for f in results if f.status == ProcessingStatus.SKIPPED)
 
         def _update() -> None:
             if self._progress_var:
                 self._progress_var.set(100)
-            self._set_status(f"Complete: {succeeded} succeeded, {failed} failed")
+            self._set_status(f"Complete: {succeeded} succeeded, {failed} failed, {skipped} skipped")
             if self._start_btn:
                 self._start_btn.config(text="Done", state=tk.DISABLED)
 
@@ -244,6 +293,10 @@ class TkinterPresenter(PresenterPort):
             return "Convert to MP4"
         if f.exif_fix and f.exif_fix.has_fixes:
             fixes = []
+            if f.exif_fix.fixed_lens_model or f.exif_fix.fixed_f_number is not None:
+                fixes.append("lens: manufacturer data")
+            if f.exif_fix.fixed_make or f.exif_fix.fixed_model:
+                fixes.append("camera: Kodak Charmera")
             if f.exif_fix.fixed_modify_date:
                 fixes.append("date format")
             if f.exif_fix.fixed_width:

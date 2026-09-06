@@ -18,7 +18,8 @@ class ExiftoolCliAdapter(ExiftoolPort):
                 "-ImageWidth", "-ImageHeight",
                 "-ExifImageWidth", "-ExifImageHeight",
                 "-ModifyDate", "-DateTimeOriginal", "-CreateDate",
-                "-Make", "-Model",
+                "-EXIF:Make", "-EXIF:Model",
+                "-EXIF:LensModel", "-EXIF:FNumber", "-EXIF:UserComment",
                 str(file_path),
             ],
             capture_output=True, text=True, check=True,
@@ -34,6 +35,9 @@ class ExiftoolCliAdapter(ExiftoolPort):
             actual_image_height=data.get("ImageHeight"),
             make=data.get("Make"),
             model=data.get("Model"),
+            lens_model=data.get("LensModel"),
+            f_number=data.get("FNumber"),
+            user_comment=data.get("UserComment"),
         )
 
     def rebuild_exif(self, file_path: Path) -> None:
@@ -58,6 +62,11 @@ class ExiftoolCliAdapter(ExiftoolPort):
         create_date: str | None = None,
         exif_image_width: int | None = None,
         exif_image_height: int | None = None,
+        make: str | None = None,
+        model: str | None = None,
+        lens_model: str | None = None,
+        f_number: float | None = None,
+        user_comment: str | None = None,
     ) -> None:
         # Rebuild EXIF first to fix corrupt structure from Charmera
         self.rebuild_exif(file_path)
@@ -68,6 +77,11 @@ class ExiftoolCliAdapter(ExiftoolPort):
             "CreateDate": create_date,
             "ExifImageWidth": exif_image_width,
             "ExifImageHeight": exif_image_height,
+            "EXIF:Make": make,
+            "EXIF:Model": model,
+            "EXIF:LensModel": lens_model,
+            "EXIF:FNumber": f_number,
+            "EXIF:UserComment": user_comment,
         }
         args = [self._exe, "-overwrite_original"]
         for tag, value in tag_map.items():
