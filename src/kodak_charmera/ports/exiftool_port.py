@@ -20,5 +20,7 @@ class ExiftoolPort(ABC):
         create_date: str | None = None,
         exif_image_width: int | None = None,
         exif_image_height: int | None = None,
+        make: str | None = None,
+        model: str | None = None,
     ) -> None:
         ...

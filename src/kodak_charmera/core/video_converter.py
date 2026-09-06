@@ -11,6 +11,10 @@ class VideoConverter:
         self._ffmpeg = ffmpeg
         self._config = config
 
+    @property
+    def keep_avi(self) -> bool:
+        return not self._config.delete_avi_after_convert
+
     def convert(
         self,
         file: CameraFile,
@@ -31,6 +35,11 @@ class VideoConverter:
             creation_time=file.file_modified,
             progress_callback=progress_callback,
         )
+
+        if not output_path.is_file() or output_path.stat().st_size == 0:
+            raise RuntimeError("FFmpeg did not produce an output file.")
+        if self._ffmpeg.probe_duration(output_path) <= 0:
+            raise RuntimeError("Converted video has no positive duration.")
 
         # Replace destination with the MP4 path
         avi_copy = file.destination_path

@@ -15,7 +15,7 @@
 
     <key>WatchPaths</key>
     <array>
-        <string>/Volumes/Untitled</string>
+        <string>/Volumes</string>
     </array>
 
     <key>KeepAlive</key>

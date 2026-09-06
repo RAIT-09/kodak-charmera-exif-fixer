@@ -1,6 +1,7 @@
 import json
 import re
 import subprocess
+import tempfile
 from pathlib import Path
 from datetime import datetime
 from typing import Callable, Optional
@@ -30,7 +31,7 @@ class FfmpegCliAdapter(FfmpegPort):
         duration = self.probe_duration(input_path)
 
         cmd = [
-            self._ffmpeg, "-y",
+            self._ffmpeg, "-n", "-nostdin", "-v", "error",
             "-i", str(input_path),
             "-c:v", video_codec,
             "-crf", str(crf),
@@ -43,22 +44,33 @@ class FfmpegCliAdapter(FfmpegPort):
             cmd.extend(["-metadata", f"creation_time={creation_time.isoformat()}"])
         cmd.extend(["-progress", "pipe:1", str(output_path)])
 
-        proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-        )
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            if progress_callback and duration > 0:
-                match = re.match(r"out_time_us=(\d+)", line.strip())
-                if match:
-                    elapsed_us = int(match.group(1))
-                    percent = min((elapsed_us / 1_000_000) / duration * 100, 100.0)
-                    progress_callback(percent)
-
-        proc.wait()
-        if proc.returncode != 0:
-            stderr = proc.stderr.read() if proc.stderr else ""
-            raise RuntimeError(f"ffmpeg failed (rc={proc.returncode}): {stderr}")
+        # A file cannot fill a pipe and deadlock the progress reader.
+        with tempfile.TemporaryFile(mode="w+t") as errors:
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=errors, text=True,
+            )
+            try:
+                assert proc.stdout is not None
+                for line in proc.stdout:
+                    if progress_callback and duration > 0:
+                        match = re.match(r"out_time_us=(\d+)", line.strip())
+                        if match:
+                            percent = min(int(match.group(1)) / 1_000_000 / duration * 100, 100.0)
+                            progress_callback(percent)
+                proc.wait()
+                if proc.returncode != 0:
+                    errors.seek(0)
+                    raise RuntimeError(f"ffmpeg failed (rc={proc.returncode}): {errors.read(8192)}")
+            finally:
+                if proc.poll() is None:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait()
+                if proc.stdout:
+                    proc.stdout.close()
 
         return output_path
 

@@ -26,6 +26,12 @@ AVI videos also have problems:
 3. **Converts AVI to MP4** — H.264 + AAC with proper `creation_time` metadata
 4. **Preserves file modification times** — output files retain the original timestamps
 
+Imported photos are labeled with EXIF **Make = Kodak** and **Model = Charmera**.
+Missing or different camera values are corrected, shown as `camera: Kodak Charmera`
+in the preview, and checked after writing. This also runs when dates and dimensions
+already need no repair. Only import Charmera photos when using this tool: this is
+an explicit camera label, not automatic camera-model identification.
+
 ## Installation
 
 ### Prerequisites
@@ -76,6 +82,12 @@ kodak-charmera --cli
 
 Interactive CLI that shows a preview and asks for confirmation before processing.
 
+In a terminal, progress updates in place with a bar, completed/total file count,
+the current operation, video conversion percentage, filename, and elapsed time.
+The file count tracks completed files; the conversion percentage tracks the current
+video. Narrow terminals use a compact display. Set `NO_COLOR=1` to disable colors.
+Redirected output and `TERM=dumb` use one log entry per processing phase.
+
 ### Automated Mode
 
 ```bash
@@ -83,6 +95,31 @@ kodak-charmera --auto
 ```
 
 Processes everything without prompting. Useful for automation and the LaunchAgent.
+
+Existing output files are **skipped** in this mode, never automatically overwritten.
+If several camera cards are connected, specify `--source` explicitly.
+
+### SD cards and existing files
+
+Cards are detected by their `DCIM` folder across mounted volumes, independent of
+the card name. Subfolders are included. A DCIM folder identifies a media card,
+not specifically a Charmera; if multiple cards are found, select the intended one.
+You can also select a source folder manually or pass it directly:
+
+```bash
+kodak-charmera --cli --source "/Volumes/MY SD CARD"
+kodak-charmera --cli --source ~/Pictures/CharmeraOriginals
+```
+
+When a target photo or MP4 already exists, the CLI or GUI asks whether to overwrite
+it. The default is **No**, which skips that input. Processing happens in a temporary
+folder first. EXIF changes are read back and video output is checked with ffprobe
+before publishing. A failed repair or conversion leaves the existing output intact.
+The source folder and source SD card cannot be used as the destination.
+
+Conflicts are based on generated output names (file modification timestamp), not
+content hashes. Separate inputs with the same timestamp receive numbered names
+in sorted source-path order; this is not content-based deduplication.
 
 ### Custom Destination
 
@@ -95,7 +132,7 @@ Works with any mode (`--cli`, `--auto`, or GUI).
 ### All Options
 
 ```
-usage: kodak-charmera [-h] [--cli] [--auto] [--dest DEST]
+usage: kodak-charmera [-h] [--cli] [--auto] [--dest DEST] [--source SOURCE]
 
 Kodak Charmera EXIF Fixer
 
@@ -104,6 +141,7 @@ options:
   --cli        Run in CLI mode (no GUI)
   --auto       Auto-confirm (for LaunchAgent use)
   --dest DEST  Override destination directory
+  --source SOURCE  SD card, DCIM, or local media folder
 ```
 
 ## macOS Auto-Launch (LaunchAgent)
@@ -116,7 +154,9 @@ You can configure macOS to automatically launch the app whenever the Kodak Charm
 python -m kodak_charmera.launcher.launchd_installer install
 ```
 
-This installs a LaunchAgent that watches `/Volumes/Untitled` (the camera's mount point). When the camera is plugged in, the GUI opens automatically.
+This installs a LaunchAgent that watches `/Volumes` for mount changes, independent
+of the card name. Other disk mount changes may also launch the GUI. Reinstall the
+LaunchAgent after updating to replace the older name-specific configuration.
 
 ### Uninstall
 

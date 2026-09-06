@@ -17,6 +17,7 @@ class ProcessingStatus(Enum):
     CONVERTING = "converting"
     COMPLETED = "completed"
     FAILED = "failed"
+    SKIPPED = "skipped"
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,8 @@ class ExifFix:
     fixed_create_date: Optional[str] = None
     fixed_width: Optional[int] = None
     fixed_height: Optional[int] = None
+    fixed_make: Optional[str] = None
+    fixed_model: Optional[str] = None
 
     @property
     def has_fixes(self) -> bool:
@@ -48,6 +51,8 @@ class ExifFix:
             self.fixed_create_date,
             self.fixed_width,
             self.fixed_height,
+            self.fixed_make,
+            self.fixed_model,
         ])
 
 
@@ -86,3 +91,6 @@ class ProgressEvent:
     progress_percent: float
     message: str
     error: Optional[str] = None
+    file_progress_percent: Optional[float] = None
+    completed_files: int = 0
+    total_files: int = 0

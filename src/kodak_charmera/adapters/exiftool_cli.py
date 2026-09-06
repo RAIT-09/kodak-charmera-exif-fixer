@@ -18,7 +18,7 @@ class ExiftoolCliAdapter(ExiftoolPort):
                 "-ImageWidth", "-ImageHeight",
                 "-ExifImageWidth", "-ExifImageHeight",
                 "-ModifyDate", "-DateTimeOriginal", "-CreateDate",
-                "-Make", "-Model",
+                "-EXIF:Make", "-EXIF:Model",
                 str(file_path),
             ],
             capture_output=True, text=True, check=True,
@@ -58,6 +58,8 @@ class ExiftoolCliAdapter(ExiftoolPort):
         create_date: str | None = None,
         exif_image_width: int | None = None,
         exif_image_height: int | None = None,
+        make: str | None = None,
+        model: str | None = None,
     ) -> None:
         # Rebuild EXIF first to fix corrupt structure from Charmera
         self.rebuild_exif(file_path)
@@ -68,6 +70,8 @@ class ExiftoolCliAdapter(ExiftoolPort):
             "CreateDate": create_date,
             "ExifImageWidth": exif_image_width,
             "ExifImageHeight": exif_image_height,
+            "EXIF:Make": make,
+            "EXIF:Model": model,
         }
         args = [self._exe, "-overwrite_original"]
         for tag, value in tag_map.items():

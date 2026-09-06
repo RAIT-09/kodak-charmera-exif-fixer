@@ -14,6 +14,7 @@ from .adapters.ffmpeg_cli import FfmpegCliAdapter
 from .adapters.local_filesystem import LocalFilesystemAdapter
 from .adapters.macos_volume import MacOSVolumeDetector
 from .ports.presenter_port import PresenterPort
+from .core.models import ProcessingStatus
 
 
 def _build_pipeline(presenter: PresenterPort, config: AppConfig) -> ProcessingPipeline:
@@ -33,10 +34,12 @@ def _run_pipeline(
     pipeline: ProcessingPipeline,
     volume: Path,
     config: AppConfig,
-) -> None:
+) -> int:
     plan = pipeline.scan_and_preview(volume, config.destination_dir)
     if plan:
-        pipeline.execute(plan)
+        results = pipeline.execute(plan)
+        return 1 if any(f.status == ProcessingStatus.FAILED for f in results) else 0
+    return 0
 
 
 def main() -> None:
@@ -46,15 +49,12 @@ def main() -> None:
         "--auto", action="store_true", help="Auto-confirm (for LaunchAgent use)"
     )
     parser.add_argument("--dest", type=str, help="Override destination directory")
+    parser.add_argument("--source", type=Path, help="SD card, DCIM, or local media folder")
     args = parser.parse_args()
 
     config = AppConfig()
     if args.dest:
-        config.destination_dir = Path(args.dest)
-
-    # Detect camera
-    volume_detector = MacOSVolumeDetector()
-    volume = volume_detector.find_camera_volume()
+        config.destination_dir = Path(args.dest).expanduser()
 
     # Choose presenter
     if args.cli or args.auto:
@@ -69,16 +69,23 @@ def main() -> None:
             presenter = CliPresenter()
             print("tkinter not available, falling back to CLI mode.")
 
-    if volume is None:
-        presenter.show_no_camera()
-        sys.exit(1)
-
     pipeline = _build_pipeline(presenter, config)
 
+    def run() -> int:
+        volume = (args.source.expanduser() if args.source else
+                  presenter.select_source(MacOSVolumeDetector().find_camera_volumes()))
+        if volume is None:
+            presenter.show_no_camera()
+            return 1
+        if not volume.is_dir():
+            presenter.on_error(f"Source folder does not exist: {volume}")
+            return 1
+        return _run_pipeline(pipeline, volume.resolve(), config)
+
     if hasattr(presenter, "run"):
-        presenter.run(lambda: _run_pipeline(pipeline, volume, config))
+        presenter.run(run)
     else:
-        _run_pipeline(pipeline, volume, config)
+        sys.exit(run())
 
 
 if __name__ == "__main__":
